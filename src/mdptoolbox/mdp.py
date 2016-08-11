@@ -236,7 +236,7 @@ class MDP(object):
             R_repr += repr(self.R[aa]) + "\n"
         return(P_repr + "\n" + R_repr)
 
-    def _bellmanOperator(self, V=None):
+    def _bellmanOperator(self, V=None, returnQ=False):
         # Apply the Bellman operator on the value function.
         #
         # Updates the value function and the Vprev-improving policy.
@@ -265,7 +265,10 @@ class MDP(object):
         # Get the policy and value, for now it is being returned but...
         # Which way is better?
         # 1. Return, (policy, value)
-        return (Q.argmax(axis=0), Q.max(axis=0))
+        if returnQ is True: 
+            return (Q.argmax(axis=0), Q.max(axis=0), Q)
+        else:
+            return (Q.argmax(axis=0), Q.max(axis=0))
         # 2. update self.policy and self.V directly
         # self.V = Q.max(axis=1)
         # self.policy = Q.argmax(axis=1)
@@ -414,10 +417,11 @@ class FiniteHorizon(MDP):
     """
 
     def __init__(self, transitions, reward, discount, N, h=None,
-                 skip_check=False):
+                 skip_check=False, returnQ=False):
         # Initialise a finite horizon MDP.
         self.N = int(N)
         assert self.N > 0, "N must be greater than 0."
+        self.returnQ = returnQ
         # Initialise the base class
         MDP.__init__(self, transitions, reward, discount, None, None,
                      skip_check=skip_check)
@@ -426,6 +430,8 @@ class FiniteHorizon(MDP):
         del self.iter
         # There are value vectors for each time step up to the horizon
         self.V = _np.zeros((self.S, N + 1))
+        # There is a Q value vector for each action for each time step up to the horizon
+        self.Q = _np.zeros((self.A, self.S, N + 1))
         # There are policy vectors for each time step before the horizon, when
         # we reach the horizon we don't need to make decisions anymore.
         self.policy = _np.empty((self.S, N), dtype=int)
@@ -438,7 +444,12 @@ class FiniteHorizon(MDP):
         self.time = _time.time()
         # loop through each time period
         for n in range(self.N):
-            W, X = self._bellmanOperator(self.V[:, self.N - n])
+            if self.returnQ is True: 
+                W, X, self.Q[:, :, self.N - n - 1] = self._bellmanOperator(self.V[:, self.N - n], returnQ=True)
+                if _np.any(self.Q[:, :, self.N - n - 1].argmax(axis=0) != W):
+                    print("policy!=argmax(q) on step", n)
+            else:
+                W, X = self._bellmanOperator(self.V[:, self.N - n])
             stage = self.N - n - 1
             self.V[:, stage] = X
             self.policy[:, stage] = W
